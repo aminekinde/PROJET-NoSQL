@@ -1,0 +1,36 @@
+# MongoDB
+
+q1 = "Afficher l’année où le plus grand nombre de films ont été sortis."
+q2 = "Quel est le nombre de films sortis après l’année 1999 ?"
+q3 = "Quelle est la moyenne des votes des films sortis en 2007 ?"
+q4 = "Affichez un histogramme qui permet de visualiser le nombre de films par année."
+q5 = "Quelles sont les genres de films disponibles dans la base ?"
+q6 = "Quel est le film qui a généré le plus de revenu ?"
+q7 = "Quels sont les réalisateurs ayant réalisé plus de 5 films dans la base de données ?"
+q8 = "Quel est le genre de film qui rapporte en moyenne le plus de revenus ?"
+q9 = "Quels sont les 3 films les mieux notés (rating) pour chaque décennie (1990-1999, 2000-2009, etc.) ?"
+q10 = "Quel est le film le plus long (Runtime) par genre ?"
+q11 = "Créer une vue MongoDB affichant uniquement les films ayant une note supérieure à 80 (Metascore) et généré plus de 50 millions de dollars."
+q12 = "Calculer la corrélation entre la durée des films (Runtime) et leur revenu (Revenue)."
+q13 = "Y a-t-il une évolution de la durée moyenne des films par décennie ?"
+
+# NEO4J
+q14 = "Quel est l’acteur ayant joué dans le plus grand nombre de films ?"
+q15 = "Quels sont les acteurs ayant joué dans des films où l’actrice Anne Hathaway a également joué ?"
+q16 = "Quel est l’acteur ayant joué dans des films totalisant le plus de revenus ?"
+q17 = "Quelle est la moyenne des votes ?"
+q18 = "Quel est le genre le plus représenté dans la base de données ?"
+q19 = "Quels sont les films dans lesquels les acteurs ayant joué avec vous ont également joué ?"
+q20 = "Quel réalisateur (Director) a travaillé avec le plus grand nombre d’acteurs distincts ?"
+q21 = "Quels sont les films les plus ”connectés”, c’est-à-dire ceux qui ont le plus d’acteurs en commun avec d’autres films ?"
+q22 = "Trouver les 5 acteurs ayant joué avec le plus de réalisateurs différents."
+q23 = "Recommander un film à un acteur en fonction des genres des films où il a déjà joué."
+q24 = "Créer une relation INFLUENCE PAR entre les réalisateurs en se basant sur des similarités dans les genres de films qu’ils ont réalisés."
+q25 = "Quel est le ”chemin” le plus court entre deux acteurs donnés (ex : Tom Hanks et Scarlett Johansson) ?"
+q26 = "Analyser les communautés d’acteurs : Quels sont les groupes d’acteurs qui ont tendance à travailler ensemble ? (Utilisation d’algorithmes de détection de communauté comme Louvain.)"
+
+# Questions transversales
+q27 = "Quels sont les films qui ont des genres en commun mais qui ont des réalisateurs différents ?"
+q28 = "Recommander des films aux utilisateurs en fonction des préférences d’un acteur donné."
+q29 = "Créer une relation de ”concurrence” entre réalisateurs ayant réalisé des films similaires la même année."
+q30 = "Identifier les collaborations les plus fréquentes entre réalisateurs et acteurs, puis analyser si ces collaborations sont associées à un succès commercial ou critique."
