@@ -1,4 +1,4 @@
-from database import connect_to_mongo
+from database import *
 import streamlit as st
 from bson.objectid import ObjectId
 from bson.son import SON
@@ -288,3 +288,343 @@ def repondre_question_13():
 
     # Afficher le graphique dans Streamlit
     st.pyplot(plt)
+
+###################### NEO4J ###################### 
+
+# Connexion à Neo4j
+driver = connect_to_neo4j()
+
+# Connexion à MongoDB
+films_collection = connect_to_mongo().films
+
+### 1. Créer des noeuds de type Film ###
+def create_film_nodes():
+    """
+    Créer des noeuds de type Film contenant uniquement les champs _id, title, year, Votes,
+    Revenue (Millions), rating et director.
+    """
+    films = films_collection.find()
+    for film in films:
+        driver.run("""
+        MERGE (:Film {
+            _id: $id,
+            title: $title,
+            year: $year,
+            Votes: $votes,
+            Revenue: $revenue,
+            rating: $rating,
+            director: $director
+        })
+        """, id=film["_id"],
+        title=film.get("title", ""),
+        year=film.get("year", None),
+        votes=film.get("Votes", None),
+        revenue=film.get("Revenue (Millions)", None),
+        rating=film.get("rating", None),
+        director=film.get("Director", ""))
+    print("Nœuds de type Film créés avec succès !")
+
+
+### 2. Créer des noeuds de type Actor ###
+def create_actor_nodes():
+    """
+    Créer des nœuds de type Actor contenant uniquement les acteurs de manière distincte.
+    """
+    films = films_collection.find()
+    actors_set = set()  # Pour éviter les doublons
+    for film in films:
+        actors = film.get("Actors", "").split(",") if film.get("Actors") else []
+        for actor in actors:
+            actors_set.add(actor.strip())
+    
+    for actor in actors_set:
+        driver.run("""
+        MERGE (:Actor {name: $name})
+        """, name=actor)
+    print("Nœuds de type Actor créés avec succès !")
+
+
+### 3. Créer des relations 'A joué' ###
+def create_film_actor_relation():
+    """
+    Créer des relations 'ACTED_IN' entre les acteurs et les films dans lesquels ils ont joué.
+    """
+    films = films_collection.find()
+    for film in films:
+        actors = film.get("Actors", "").split(",") if film.get("Actors") else []
+        for actor in actors:
+            driver.run("""
+            MATCH (f:Film {_id: $id})
+            MERGE (a:Actor {name: $name})
+            MERGE (a)-[:ACTED_IN]->(f)
+            """, id=film["_id"], name=actor.strip())
+    print("Relations 'ACTED_IN' créées avec succès !")
+
+
+### 4. Créer des nœuds pour les membres du projet ###
+def create_team_nodes_and_attach_to_film():
+    """
+    Créer des nœuds pour les membres du projet et les relier à un film spécifique.
+    """
+    team_members = ["Amine", "Alex", "Marie", "Sophie"]  # Membres du projet
+    film_title = "Inception"  # Film de mon choix
+
+    for member in team_members:
+        driver.run("""
+        MERGE (m:Actor {name: $name})
+        WITH m
+        MATCH (f:Film {title: $film})
+        MERGE (m)-[:CONTRIBUTED_TO]->(f)
+        """, name=member, film=film_title)
+    print("Nœuds pour les membres du projet créés et liés à un film avec succès !")
+
+
+### 5. Créer des noeuds pour les Réalisateurs ###
+def create_director_nodes():
+    """
+    Créer des nœuds de type Réalisateur depuis le champ Director de la base MongoDB.
+    """
+    films = films_collection.find()
+    directors_set = set()  # Pour éviter les doublons
+    for film in films:
+        director = film.get("Director", "").strip()
+        if director:
+            directors_set.add(director)
+    
+    for director in directors_set:
+        driver.run("""
+        MERGE (:Director {name: $name})
+        """, name=director)
+    print("Nœuds de type Réalisateur créés avec succès !")
+
+### 6. Créer la relation 'DIRECTED_BY' ###
+def create_directed_by_relation():
+    """
+    Créer des relations 'DIRECTED_BY' entre les réalisateurs et les films qu'ils ont réalisés.
+    """
+    films = films_collection.find()
+    for film in films:
+        director = film.get("Director", "").strip()
+        if director:
+            driver.run("""
+            MATCH (f:Film {_id: $id})
+            MERGE (d:Director {name: $name})
+            MERGE (d)-[:DIRECTED_BY]->(f)
+            """, id=film["_id"], name=director)
+    print("Relations 'DIRECTED_BY' créées avec succès !")
+
+### 7. Création du noeud genre
+def create_genre_nodes():
+    """
+    Créer des nœuds de type Genre contenant uniquement les genres distincts,
+    et créer des relations 'HAS_GENRE' entre les films et leurs genres respectifs.
+    """
+    films = films_collection.find()
+    genres_set = set()  # Pour éviter les doublons
+    for film in films:
+        genres = film.get("genre", "").split(",") if film.get("genre") else []
+        for genre in genres:
+            genres_set.add(genre.strip())
+
+    # Créer des nœuds Genre
+    for genre in genres_set:
+        driver.run("""
+        MERGE (:Genre {name: $genre})
+        """, genre=genre)
+    print("Nœuds de type Genre créés avec succès !")
+    
+    # Relier chaque film à ses genres
+    for film in films:
+        genres = film.get("genre", "").split(",") if film.get("genre") else []
+        for genre in genres:
+            driver.run("""
+            MATCH (f:Film {_id: $id})
+            MATCH (g:Genre {name: $genre})
+            MERGE (f)-[:HAS_GENRE]->(g)
+            """, id=film["_id"], genre=genre.strip())
+    print("Relations 'HAS_GENRE' créées avec succès entre films et genres !")
+
+
+
+import streamlit as st
+from database import connect_to_neo4j
+
+driver = connect_to_neo4j()
+
+### 14. Acteur ayant joué dans le plus grand nombre de films ###
+def repondre_question_14():
+    query = """
+    MATCH (a:Actor)-[:ACTED_IN]->(f:Film)
+    RETURN a.name AS Acteur, COUNT(f) AS NombreDeFilms
+    ORDER BY NombreDeFilms DESC
+    LIMIT 1
+    """
+    result = driver.run(query).data()
+    if result:
+        acteur, nb_films = result[0]["Acteur"], result[0]["NombreDeFilms"]
+        st.write(f"🎭 L'acteur ayant joué dans le plus grand nombre de films est **{acteur}** avec **{nb_films}** films.")
+    else:
+        st.write("Aucun résultat trouvé.")
+
+### 15. Acteurs ayant joué avec Anne Hathaway ###
+def repondre_question_15():
+    query = """
+    MATCH (a:Actor)-[:ACTED_IN]->(f:Film)<-[:ACTED_IN]-(anne:Actor {name: "Anne Hathaway"})
+    RETURN DISTINCT a.name AS Acteur
+    """
+    result = driver.run(query).data()
+    acteurs = [r["Acteur"] for r in result]
+    st.write(f"🎭 Acteurs ayant joué avec Anne Hathaway : {', '.join(acteurs) if acteurs else 'Aucun trouvé.'}")
+
+### 16. Acteur ayant joué dans les films totalisant le plus de revenus ###
+def repondre_question_16():
+    """
+    Trouver l'acteur ayant joué dans des films totalisant le plus de revenus.
+    """
+    query = """
+    MATCH (a:Actor)-[:ACTED_IN]->(f:Film)
+    WITH a, SUM(COALESCE(toFloat(f.Revenue), 0)) AS total_revenue
+    RETURN a.name AS actor, total_revenue
+    ORDER BY total_revenue DESC
+    LIMIT 1
+    """
+    result = driver.run(query).data()
+    if result:
+        st.write(f"💰 L'acteur ayant joué dans des films totalisant le plus de revenus est : {result[0]['actor']} avec un revenu total de {result[0]['total_revenue']} millions.")
+    else:
+        st.write("Aucun résultat trouvé pour cette question.")
+
+
+### 17. Moyenne des votes ###
+def repondre_question_17():
+    query = """
+    MATCH (f:Film)
+    RETURN AVG(f.Votes) AS MoyenneVotes
+    """
+    result = driver.run(query).data()
+    moyenne = result[0]["MoyenneVotes"] if result else "N/A"
+    st.write(f"⭐ La moyenne des votes est **{moyenne}**.")
+
+### 18. Genre le plus représenté ###
+def repondre_question_18():
+    query = """
+    MATCH (f:Film)
+    UNWIND split(f.genre, ",") AS Genre
+    RETURN Genre, COUNT(*) AS Nombre
+    ORDER BY Nombre DESC
+    LIMIT 1
+    """
+    result = driver.run(query).data()
+
+    print(result)
+    # genre, count = result[0]["Genre"], result[0]["Nombre"] if result else ("Aucun", "N/A")
+    # st.write(f"🎬 Le genre le plus représenté est **{genre}** avec **{count}** films.")
+
+### 19. Films où les acteurs ayant joué avec vous ont également joué ###
+def repondre_question_19():
+    query = """
+    MATCH (me:Actor {name: "TonNom"})-[:ACTED_IN]->(f1:Film)<-[:ACTED_IN]-(a:Actor),
+          (a)-[:ACTED_IN]->(f2:Film)
+    WHERE f1 <> f2
+    RETURN DISTINCT f2.title AS Films
+    """
+    result = driver.run(query).data()
+    films = [r["Films"] for r in result]
+    st.write(f"🎥 Films suggérés : {', '.join(films) if films else 'Aucun trouvé.'}")
+
+### 20. Réalisateur ayant travaillé avec le plus d’acteurs distincts ###
+def repondre_question_20():
+    query = """
+    MATCH (d:Director)<-[:DIRECTED_BY]-(f:Film)<-[:ACTED_IN]-(a:Actor)
+    RETURN d.name AS Directeur, COUNT(DISTINCT a) AS NombreActeurs
+    ORDER BY NombreActeurs DESC
+    LIMIT 1
+    """
+    result = driver.run(query).data()
+    if result:
+        directeur, nb_acteurs = result[0]["Directeur"], result[0]["NombreActeurs"]
+        st.write(f"🎬 Le réalisateur ayant travaillé avec le plus d’acteurs est **{directeur}** avec **{nb_acteurs}** acteurs.")
+    else:
+        st.write("Aucun résultat trouvé.")
+
+### 21. Films les plus connectés ###
+def repondre_question_21():
+    query = """
+    MATCH (f1:Film)<-[:ACTED_IN]-(a:Actor)-[:ACTED_IN]->(f2:Film)
+    WHERE f1 <> f2
+    RETURN f1.title AS Film1, f2.title AS Film2, COUNT(a) AS NombreActeursCommuns
+    ORDER BY NombreActeursCommuns DESC
+    LIMIT 5
+    """
+    result = driver.run(query).data()
+    if result:
+        st.write("🔗 **Films les plus connectés** :")
+        for row in result:
+            st.write(f"- **{row['Film1']}** ↔ **{row['Film2']}** ({row['NombreActeursCommuns']} acteurs en commun)")
+    else:
+        st.write("Aucun résultat trouvé.")
+
+### 22. Top 5 des acteurs ayant travaillé avec le plus de réalisateurs ###
+def repondre_question_22():
+    query = """
+    MATCH (a:Actor)-[:ACTED_IN]->(f:Film)-[:DIRECTED_BY]->(d:Director)
+    RETURN a.name AS Acteur, COUNT(DISTINCT d) AS NombreDeRealisateurs
+    ORDER BY NombreDeRealisateurs DESC
+    LIMIT 5
+    """
+    result = driver.run(query).data()
+    st.write("🎭 **Top 5 des acteurs ayant travaillé avec le plus de réalisateurs** :")
+    for row in result:
+        st.write(f"- {row['Acteur']} : {row['NombreDeRealisateurs']} réalisateurs")
+
+### 23. Recommandation de film à un acteur ###
+def repondre_question_23():
+    query = """
+    MATCH (a:Actor {name: "TonNom"})-[:ACTED_IN]->(f:Film)
+    UNWIND split(f.genre, ",") AS GenrePrefere
+    MATCH (f2:Film)
+    WHERE NOT EXISTS {(a)-[:ACTED_IN]->(f2)}
+    AND f2.genre CONTAINS GenrePrefere
+    RETURN DISTINCT f2.title AS FilmRecommande, f2.genre AS Genres
+    LIMIT 5
+    """
+    result = driver.run(query).data()
+    st.write("🎬 **Films recommandés** :")
+    for row in result:
+        st.write(f"- {row['FilmRecommande']} ({row['Genres']})")
+
+### 24. Relations d'influence entre réalisateurs ###
+def repondre_question_24():
+    query = """
+    MATCH (d1:Director)-[:DIRECTED_BY]-(f1:Film),
+          (d2:Director)-[:DIRECTED_BY]-(f2:Film)
+    WHERE d1 <> d2 AND f1.genre = f2.genre
+    MERGE (d1)-[:INFLUENCED_BY]->(d2)
+    """
+    driver.run(query)
+    st.write("🔄 Relations **INFLUENCED_BY** ajoutées entre réalisateurs.")
+
+### 25. Chemin le plus court entre acteurs ###
+def repondre_question_25():
+    query = """
+    MATCH p=shortestPath((a1:Actor {name: "Tom Hanks"})-[:ACTED_IN*]-(a2:Actor {name: "Scarlett Johansson"}))
+    RETURN p
+    """
+    result = driver.run(query).data()
+    st.write("🔗 **Chemin le plus court entre Tom Hanks et Scarlett Johansson** :", result)
+
+### 26. Analyse des communautés d'acteurs ###
+def repondre_question_26():
+    query = """
+    CALL gds.louvain.stream({
+        nodeProjection: 'Actor',
+        relationshipProjection: { ACTED_IN: { type: 'ACTED_IN', orientation: 'UNDIRECTED' }}
+    })
+    YIELD nodeId, communityId
+    RETURN gds.util.asNode(nodeId).name AS Acteur, communityId
+    ORDER BY communityId
+    """
+    result = driver.run(query).data()
+    st.write("📊 **Communautés d’acteurs** :")
+    for row in result:
+        st.write(f"- {row['Acteur']} : Communauté {row['communityId']}")

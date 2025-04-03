@@ -1,6 +1,7 @@
 import streamlit as st
 from queries import * 
 from Page_MongoDB import * 
+from Page_Neo4j import *
 
 def main():
     """
@@ -10,12 +11,14 @@ def main():
     st.write("Application Web pour la manipulation de bases de données NoSQL MongoDB et Neo4j.")  # Description
 
     # Menu de navigation
-    page = st.sidebar.radio("Sélectionner une page", ("Films", "MongoDB"))
+    page = st.sidebar.radio("Sélectionner une page", ("Films", "MongoDB","Neo4j"))
 
     if page == "Films":
         afficher_films()
     elif page == "MongoDB":
         afficher_questions_mongodb()
+    elif page == "Neo4j":
+        afficher_questions_neo4j()
 
 def afficher_films():
     """
