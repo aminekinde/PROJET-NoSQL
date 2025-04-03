@@ -22,7 +22,7 @@ def afficher_films():
     Afficher la liste des films avec un curseur pour limiter le nombre de films à afficher.
     """
     st.subheader("Liste des Films")
-    limit = st.slider("Nombre de films à afficher", 1, 50, 10)
+    limit = st.slider("Nombre de films à afficher par page", 1, 50, 10)
 
     if st.button("Afficher les films"):
         try:
@@ -50,8 +50,7 @@ def afficher_films():
         update_film_form()  # Afficher le formulaire de mise à jour
 
     # Bouton pour supprimer un film
-    if st.button("Supprimer un Film"):
-        delete_film_form()  # Afficher le formulaire de suppression
+    delete_film_form()  # Afficher le formulaire de suppression
 
 def insert_film_form():
     """
@@ -120,25 +119,17 @@ def update_film_form():
             st.warning("Veuillez entrer un ID valide.")
 
 def delete_film_form():
-    """
-    Affiche le formulaire pour supprimer un film.
-    """
-    st.subheader("Supprimer un Film")
+    """Affiche le formulaire pour supprimer un film."""
+    # Utilisation d'une clé unique pour le champ input pour éviter les conflits
+    film_id = st.text_input(f"**Supprimer un film**",key="film_id_input",placeholder ="Id du film à supprimer")
     
-    film_id = st.text_input("ID du film à supprimer")
+    # Bouton unique pour déclencher l'action
+    if st.button("Supprimer le film"):
+        delete_film(film_id)
 
-    if st.button("Supprimer"):
-        if film_id:
-            try:
-                deleted_count = delete_film(film_id)
-                if deleted_count > 0:
-                    st.success(f"{deleted_count} film(s) supprimé(s) avec succès.")
-                else:
-                    st.warning("Aucun film trouvé avec cet ID.")
-            except Exception as e:
-                st.error(f"Erreur lors de la suppression du film: {e}")
-        else:
-            st.warning("Veuillez entrer un ID valide.")
+
+
+
 
 
 if __name__ == "__main__":
