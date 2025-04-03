@@ -416,8 +416,7 @@ def create_directed_by_relation():
 ### 7. Création du noeud genre
 def create_genre_nodes():
     """
-    Créer des nœuds de type Genre contenant uniquement les genres distincts,
-    et créer des relations 'HAS_GENRE' entre les films et leurs genres respectifs.
+    Créer des nœuds de type Genre contenant uniquement les genres distincts présents dans les films.
     """
     films = films_collection.find()
     genres_set = set()  # Pour éviter les doublons
@@ -425,25 +424,27 @@ def create_genre_nodes():
         genres = film.get("genre", "").split(",") if film.get("genre") else []
         for genre in genres:
             genres_set.add(genre.strip())
-
-    # Créer des nœuds Genre
+    
     for genre in genres_set:
         driver.run("""
-        MERGE (:Genre {name: $genre})
-        """, genre=genre)
+        MERGE (:Genre {name: $name})
+        """, name=genre)
     print("Nœuds de type Genre créés avec succès !")
-    
-    # Relier chaque film à ses genres
+
+def create_film_genre_relation():
+    """
+    Créer des relations 'HAS_GENRE' entre les films et les genres dans lesquels ils appartiennent.
+    """
+    films = films_collection.find()
     for film in films:
         genres = film.get("genre", "").split(",") if film.get("genre") else []
         for genre in genres:
             driver.run("""
             MATCH (f:Film {_id: $id})
-            MATCH (g:Genre {name: $genre})
+            MERGE (g:Genre {name: $genre})
             MERGE (f)-[:HAS_GENRE]->(g)
             """, id=film["_id"], genre=genre.strip())
-    print("Relations 'HAS_GENRE' créées avec succès entre films et genres !")
-
+    print("Relations 'HAS_GENRE' créées avec succès !")
 
 
 import streamlit as st
@@ -507,30 +508,34 @@ def repondre_question_17():
 
 ### 18. Genre le plus représenté ###
 def repondre_question_18():
+    """
+    Trouver le genre le plus représenté dans la base de données.
+    """
     query = """
-    MATCH (f:Film)
-    UNWIND split(f.genre, ",") AS Genre
-    RETURN Genre, COUNT(*) AS Nombre
-    ORDER BY Nombre DESC
+    MATCH (g:Genre)<-[:HAS_GENRE]-(f:Film)
+    RETURN g.name AS genre, COUNT(f) AS genre_count
+    ORDER BY genre_count DESC
     LIMIT 1
     """
     result = driver.run(query).data()
+    if result:
+        st.write(f"🎬 Le genre le plus représenté dans la base de données est : {result[0]['genre']} avec {result[0]['genre_count']} films.")
+    else:
+        st.write("Aucun genre trouvé dans les films.")
 
-    print(result)
-    # genre, count = result[0]["Genre"], result[0]["Nombre"] if result else ("Aucun", "N/A")
-    # st.write(f"🎬 Le genre le plus représenté est **{genre}** avec **{count}** films.")
 
 ### 19. Films où les acteurs ayant joué avec vous ont également joué ###
 def repondre_question_19():
     query = """
-    MATCH (me:Actor {name: "TonNom"})-[:ACTED_IN]->(f1:Film)<-[:ACTED_IN]-(a:Actor),
+    MATCH (me:Actor {name: "Amine"})-[:ACTED_IN]->(f1:Film)<-[:ACTED_IN]-(a:Actor),
           (a)-[:ACTED_IN]->(f2:Film)
     WHERE f1 <> f2
     RETURN DISTINCT f2.title AS Films
     """
     result = driver.run(query).data()
-    films = [r["Films"] for r in result]
-    st.write(f"🎥 Films suggérés : {', '.join(films) if films else 'Aucun trouvé.'}")
+    print(result)
+    # films = [r["Films"] for r in result]
+    # st.write(f"🎥 Films suggérés : {', '.join(films) if films else 'Aucun trouvé.'}")
 
 ### 20. Réalisateur ayant travaillé avec le plus d’acteurs distincts ###
 def repondre_question_20():
@@ -611,20 +616,120 @@ def repondre_question_25():
     RETURN p
     """
     result = driver.run(query).data()
-    st.write("🔗 **Chemin le plus court entre Tom Hanks et Scarlett Johansson** :", result)
+    
+    if result:
+        # Récupérer le chemin du résultat
+        path = result[0]["p"]
+        
+        # Extraire les acteurs et films du chemin
+        actors = []
+        films = []
+        for i in range(0, len(path.nodes) - 1, 2):  # Les nœuds sont alternés entre acteurs et films
+            actor = path.nodes[i]
+            film = path.nodes[i + 1]
+            actors.append(actor['name'])
+            films.append(film['title'])
+        
+        # Créer un affichage formaté
+        chemin = " -> ".join([f"{actor} (Film: {film})" for actor, film in zip(actors, films)])
+        
+        # Afficher le résultat
+        st.write(f"🔗 **Chemin le plus court entre Tom Hanks et Scarlett Johansson** :")
+        st.write(f"{chemin}")
+    else:
+        st.write("Aucun chemin trouvé entre Tom Hanks et Scarlett Johansson.")
+
 
 ### 26. Analyse des communautés d'acteurs ###
 def repondre_question_26():
     query = """
-    CALL gds.louvain.stream({
-        nodeProjection: 'Actor',
-        relationshipProjection: { ACTED_IN: { type: 'ACTED_IN', orientation: 'UNDIRECTED' }}
-    })
-    YIELD nodeId, communityId
-    RETURN gds.util.asNode(nodeId).name AS Acteur, communityId
-    ORDER BY communityId
+    CALL gds.graph.create('actorGraph', 
+        'Actor', 
+        'ACTED_IN', 
+        {
+            nodeProperties: ['name']
+        }
+    )
+    YIELD graphName, nodeCount, relationshipCount;
+
+    CALL gds.louvain.stream('actorGraph')
+    YIELD nodeId, communityId, score
+    RETURN gds.util.asNode(nodeId).name AS actor, communityId
+    ORDER BY communityId, score DESC
+    """
+    
+    result = driver.run(query).data()
+    
+    if result:
+        st.write("🔍 **Communautés d'acteurs détectées :**")
+        for row in result:
+            st.write(f"🎭 Acteur : {row['actor']} appartient à la communauté {row['communityId']}")
+    else:
+        st.write("Aucune communauté détectée.")
+
+def repondre_question_27():
+    query = """
+    MATCH (f1:Film)-[:HAS_GENRE]->(g:Genre)<-[:HAS_GENRE]-(f2:Film)
+    WHERE f1.director <> f2.director
+    RETURN f1.title AS Film1, f2.title AS Film2, g.name AS Genre
+    ORDER BY Genre
     """
     result = driver.run(query).data()
-    st.write("📊 **Communautés d’acteurs** :")
-    for row in result:
-        st.write(f"- {row['Acteur']} : Communauté {row['communityId']}")
+    if result:
+        st.write("🎬 Films ayant des genres en commun mais réalisés par des réalisateurs différents :")
+        for row in result:
+            st.write(f"🎥 **{row['Film1']}** et **{row['Film2']}** partagent le genre **{row['Genre']}**.")
+    else:
+        st.write("Aucun film trouvé.")
+
+def repondre_question_28():
+    actor_name = "Tom Hanks"  
+    query = f"""
+    MATCH (a:Actor {{name: '{actor_name}'}})-[:ACTED_IN]->(f:Film)-[:HAS_GENRE]->(g:Genre)
+    WITH g, collect(f) AS films
+    UNWIND films AS film
+    MATCH (f2:Film)-[:HAS_GENRE]->(g)
+    WHERE NOT (f2)-[:ACTED_IN]->(:Actor {{name: '{actor_name}'}})
+    RETURN f2.title AS RecommendedFilm, g.name AS Genre
+    ORDER BY RecommendedFilm
+    LIMIT 5
+    """
+    result = driver.run(query).data()
+    if result:
+        st.write(f"🎬 Films recommandés pour **{actor_name}** en fonction des genres qu'il a joué :")
+        for row in result:
+            st.write(f"🎥 **{row['RecommendedFilm']}** (Genre: {row['Genre']})")
+    else:
+        st.write(f"Aucune recommandation pour {actor_name}.")
+
+def repondre_question_29():
+    query = """
+    MATCH (d1:Director)-[:DIRECTED_BY]->(f1:Film)-[:HAS_GENRE]->(g:Genre)<-[:HAS_GENRE]-(f2:Film)<-[:DIRECTED_BY]-(d2:Director)
+    WHERE d1 <> d2 AND f1.year = f2.year
+    MERGE (d1)-[:COMPETES_WITH]->(d2)
+    RETURN d1.name AS Director1, d2.name AS Director2, f1.year AS Year
+    """
+    result = driver.run(query).data()
+    if result:
+        st.write("🎬 Relations de concurrence entre réalisateurs ayant réalisé des films similaires la même année :")
+        for row in result:
+            st.write(f"🎥 **{row['Director1']}** et **{row['Director2']}** ont réalisé des films similaires en **{row['Year']}**.")
+    else:
+        st.write("Aucune concurrence détectée.")
+
+
+def repondre_question_30():
+    query = """
+    MATCH (d:Director)-[:DIRECTED_BY]->(f:Film)-[:ACTED_IN]->(a:Actor)
+    WITH d.name AS Director, a.name AS Actor, COUNT(f) AS CollaborationCount, AVG(f.revenue) AS AverageRevenue, AVG(f.rating) AS AverageRating
+    RETURN Director, Actor, CollaborationCount, AverageRevenue, AverageRating
+    ORDER BY CollaborationCount DESC
+    LIMIT 5
+    """
+    result = driver.run(query).data()
+    if result:
+        st.write("🎬 Collaborations les plus fréquentes entre réalisateurs et acteurs :")
+        for row in result:
+            st.write(f"🎥 **{row['Director']}** et **{row['Actor']}** ont collaboré **{row['CollaborationCount']}** fois. Revenus moyens : {row['AverageRevenue']}, Note moyenne : {row['AverageRating']}")
+    else:
+        st.write("Aucune collaboration fréquente trouvée.")
